@@ -308,6 +308,8 @@ A_3 = 1/dcgain_W_3;                             % gain at low frequencies
 omega_3 = freq_W_3 / sqrt((1 / mag_W_3^2) - 1); % natural frequency
 
 W_3_tf = tf([1 / M_3 omega_3], [1 omega_3 * A_3]);
+W_3 = makeweight(dcgain_W_3,[freq_W_3,mag_W_3],hfgain_W_3);
+
  % Set W3 equal to W1 for relaxed model following constraint
 
 % Either linearize or use the proof of exercise 2, both give obviously the same answer
@@ -387,95 +389,55 @@ disp(norm_T_wz_inf);
 
 
 %% 3C.2 Controller order reduction (5%)
-% Load the initial controller C0_e (example given, replace with actual data)
-% Assuming C0_e is a transfer function object
-%load('C0_e.mat'); % Replace with actual loading mechanism if different
+% Load the initial controller C0_e (example given, replace with actual data) Assuming C0_e is a transfer function object
+% load('C0_e.mat')
 close all; clc
 %pzmap(minreal(C0_e))
 F_f = 1;
 C0_e = C_e;
 zpk(C0_e)
-%pole(C0_e)
+
+% Show poles and zeros
+pole(C0_e)
 zero(C0_e)
-zpkdata(C0_e,'v')
+[z, p, k] = zpkdata(C0_e,'v')
 
-% Define thresholds
-high_threshold = 1e4;  % Example threshold for very high values
-low_threshold = 0.0030;  % Example threshold for very low values
-
-
-% Original poles
-poles = [-1.4256e+06 + 0i, -88.37 + 93.301i, -88.37 - 93.301i, -22.93 + 19.053i, -22.93 - 19.053i, ...
-         -12.948 + 12.926i, -12.948 - 12.926i, -0.0021061 + 0i, -0.0028285 + 0i];
-zeros = [-28118 + 0i, -91.366 +     95.336i, -91.366 -     95.336i, -14.287 +     14.574i, -14.287 -     14.574i, -12.98 +     12.949i, -12.98 -     12.949i, -0.0028285 +          0i];
-% Poles to remove
-poles_to_remove = [-1.4256e+06 + 0i, -0.0028285 + 0i];
-zeros_to_remove = [-28118 + 0i, -0.0028285 +          0i];
-% New set of poles
-new_poles = setdiff(poles, poles_to_remove); 
-new_zeros = setdiff(zeros, zeros_to_remove);
-
-% Gain of the transfer function (modify according to your system)
-gain = mag2db(-1.4256e+06/-28118)
-
--1.4256e+06/-28118
-% Create the new transfer function
-C_e_min = zpk(new_zeros, new_poles, gain)
-
-
-% Remove extreme poles
-%C_e_min = remove_extreme_poles_zeros(C0_e, high_threshold, low_threshold);
-
-pole(C_e_min) 
-zero(C_e_min)
-figure;
-bode(C0_e)
-hold on;
-bode(C_e_min)
-%%
-close all
+% View contents of C0_e
 R = reducespec(C0_e,"balanced");
 figure;
 view(R)
 
-rsys = getrom(R,Order=5);
-pole(rsys)
-zero(rsys)
-figure;
-bode(C0_e,rsys,'r--')
-legend("Original","Order 7")
-%%
-figure;
-iopzmap(C_e)
-hold on;
-iopzmap(rsys)
+% Extract poles and zeros from the transfer function C0_e
+original_poles = pole(C0_e);
+original_zeros = zero(C0_e);
+
+% Identify poles and zeros to keep
+poles_to_keep = original_poles([true true true true true true true true false]);
+zeros_to_keep = original_zeros([true true true true true true true false]);
+
+% Create the new transfer function with the kept poles and zeros
+C_e_min = zpk(zeros_to_keep, poles_to_keep, dcgain(C0_e));
+C_i_min = minreal(tf(C_e_min * tf([1 0], 1)));
+
+R = reducespec(C_e_min,"balanced");
+C_e_red = getrom(R,Order=2);
+C_i_red = minreal(tf(C_e_red * tf([1 0], 1)));
 
 figure;
-bode(C0_e,rsys,'r--')
-legend("Original","Order 6")
-% %size(C0_e)
-% zero(C0_e)
-% %size(minreal(C0_e))
-% zero(minreal(C0_e))
-% 
-% figure;
-% bode(C0_e)
-% hold on;
-% bode(minreal(C0_e))
+bode(C0_e,C_e_min,'r--')
+legend("Original","Order 8")
 
-%%
-% Display full order controller details
+figure;
+bode(C_e_min, C_i_min, 'r--');
+legend("Order 8","Order 2")
+
+
+%% Display full order controller details
 disp('Full Order Controller C0_e:')
 zpk(C0_e)
 
 % Obtain ZPK data
 [z, p, k] = zpkdata(C0_e, 'v');
-
-% Reform the minimal form controller C_e_min
-% Retain necessary zeros and poles, adjust gain
-z_min = z(1:6); % Retain first 6 zeros (example indices)
-p_min = p(1:7); % Retain first 7 poles (example indices)
-k_min = k * (prod(p_min) / prod(z_min)); % Adjust gain
 
 C_e_min = zpk(z_min, p_min, k_min);
 disp('Minimal Form Controller C_e_min:')
