@@ -182,18 +182,18 @@ clearvars -except G_a G_am G_m G_cl_q_unsc C_q C_sc G C_i_pm C_i_st
 
 % Low-pass filter parameters W_1
 % Penalises low frequency deviations tracking errors.
-dcgain_W_1 = 1e3;           % high gain at low frequencies
-hfgain_W_1 = 1e-3;        % zero gain at high frequencies
-mag_W_1 = db2mag(-3.01);  % -3.01 dB at 4 rad/s
+dcgain_W_1 = 10;           % high gain at low frequencies
+hfgain_W_1 = 0.1;        % zero gain at high frequencies
+mag_W_1 = 0.707;  % -3.01 dB at 4 rad/s
 freq_W_1 = 4.0;           % [rad/s]
 
 % High-pass filter parameters W_2, assume M_1 = A_2 , A_1 = M_2
 % Penalises high frequency inputs to the system.
-dcgain_W_2 = hfgain_W_1;  % zero gain at low frequencies
-hfgain_W_2 = dcgain_W_1;  % high gain at high frequencies
-mag_W_2 = db2mag(-15);    % -15 dB at -3.01dB bandwidth frequency
+dcgain_W_2 = 0.1;  % zero gain at low frequencies
+hfgain_W_2 = 10;  % high gain at high frequencies
+mag_W_2 = 0.177;    % -15 dB at -3.01dB bandwidth frequency
 freq_W_2 = 151;           % freq where magnitude of actuator dynamics equals -3.01dB [rad/s]
-
+%bode(G_am)
 % Construct W_1 and W_2
 W_1 = makeweight(dcgain_W_1,[freq_W_1,mag_W_1],hfgain_W_1);
 W_2 = makeweight(dcgain_W_2,[freq_W_2,mag_W_2],hfgain_W_2);
@@ -263,8 +263,8 @@ cost_function = @(x) ...
 options = optimoptions('fmincon', 'Display', 'iter', 'Algorithm', 'sqp');
 [x_opt, ~] = fmincon(cost_function, x0,[], [], [], [], [], ub, [], options);
 
-omega_d = x_opt(1)
-zeta_d = x_opt(2)
+omega_d = x_opt(1);
+zeta_d = x_opt(2);
 
 % Construct the transfer function T_d
 T_d = tf([-omega_d^2 / z_m omega_d^2], [1, 2 * zeta_d * omega_d, omega_d^2]); % Reference model% Plot the step response and show the characteristics
@@ -297,9 +297,9 @@ clearvars -except G_a G_am G_m G_cl_q_unsc C_q C_sc G C_i_pm C_i_st W_1_tf W_2_t
 clc 
 % Low-pass filter parameters W_3
 % Penalises difference between reference and state
-dcgain_W_3 = 1e3;         % high gain at low frequencies
-hfgain_W_3 = 1e-3;        % zero gain at high frequencies
-mag_W_3 = db2mag(-3.01); % -3.01 dB at 4 rad/s
+dcgain_W_3 = 10;         % high gain at low frequencies
+hfgain_W_3 = 0.1;        % zero gain at high frequencies
+mag_W_3 = 0.707; % -3.01 dB at 4 rad/s
 freq_W_3 = 4;         % [rad/s]
 
 % Compute M_3, A_3, and omega_3
@@ -354,15 +354,17 @@ save('C_e.mat', 'C_e')
 S_o = 1/(1+G*C_e);
 T_o = 1 - S_o;
 %T_wz = [W1 * S_o; W2 * C_e * S_o; W3 * (T_d - T_o)];
-
 %%
+% Define the frequency range
+freq_range = {1, 300}; % Frequency range from 1 to 300 rad/s
+
 % Plot the singular values of T_wz and its individual components
 figure;
-sigma(T_wz);
+sigma(T_wz, freq_range);
 hold on;
-sigma(T_wz(1,:), 'r--');
-sigma(T_wz(2,:), 'g--');
-sigma(T_wz(3,:), 'b--');
+sigma(T_wz(1,:), freq_range, 'r--');
+sigma(T_wz(2,:), freq_range, 'g--');
+sigma(T_wz(3,:), freq_range, 'b--');
 legend('\sigma(T_{wz})', '\sigma(T_{wz1})', '\sigma(T_{wz2})', '\sigma(T_{wz3})');
 title('Singular Value Plot');
 xlabel('Frequency (rad/s)');
@@ -395,78 +397,55 @@ close all; clc
 %pzmap(minreal(C0_e))
 F_f = 1;
 C0_e = C_e;
-zpk(C0_e)
 
-% Show poles and zeros
-pole(C0_e)
-zero(C0_e)
-[z, p, k] = zpkdata(C0_e,'v')
-
-% View contents of C0_e
-R = reducespec(C0_e,"balanced");
-figure;
-view(R)
+disp('Initial Controller C_e: ')
+[z, p, k] = zpkdata(C0_e,'v');
 
 % Extract poles and zeros from the transfer function C0_e
 original_poles = pole(C0_e);
 original_zeros = zero(C0_e);
-%original_poles(1)/original_zeros(1)
+
 % Identify poles and zeros to keep
-poles_to_keep = original_poles([true true true true true true true true false]);
-zeros_to_keep = original_zeros([true true true true true true true false]);
+poles_to_keep = original_poles([false true true true true true true true false]);
+zeros_to_keep = original_zeros([false true true true true true true false]);
 
 % Create the new transfer function with the kept poles and zeros
-C_e_min = zpk(zeros_to_keep, poles_to_keep, dcgain(C0_e));
-C_i_min = minreal(tf(C_e_min * tf([1 0], 1)));
+C_e_min = zpk(zeros_to_keep, poles_to_keep, db2mag(50));
+%C_i_min = minreal(tf(C_e_min * tf([1 0], 1)));
+poles_to_keep = original_poles([false true true true true true true false false]);
+C_i_min = zpk(zeros_to_keep, poles_to_keep, db2mag(50));
 
-R = reducespec(C_e_min,"balanced");
-C_e_red = getrom(R,Order=2);
-C_i_red = minreal(tf(C_e_red * tf([1 0], 1)));
-
+R = reducespec(C_i_min,"balanced");
 figure;
-bode(C0_e,C_e_min,'r--')
-legend("Original","Order 8")
+view(R)
+C_i_red = getrom(R,Order=2);
 
-figure;
-bode(C_e_min, C_i_min, 'r--');
-legend("Order 7","Order 2")
-
-
-%% Display full order controller details
-disp('Full Order Controller C0_e:')
-zpk(C0_e)
-
-% Obtain ZPK data
-[z, p, k] = zpkdata(C0_e, 'v');
-
-C_e_min = zpk(z_min, p_min, k_min);
-disp('Minimal Form Controller C_e_min:')
+disp('Minimum Integral Controller: ')
 zpk(C_e_min)
 
-% Obtain the integral controller C_i_min
-C_i_min = C_e_min / tf('s');
-
-C_i_min = minreal(tf(C_e_min * tf([1 0], 1)));
-
-disp('Integral Controller C_i_min:')
-zpk(C_i_min)
-
-% Perform model order reduction
-C_i_red = balred(C_i_min, 2); % Example order reduction to 2nd order
-
-disp('Reduced Order Integral Controller C_i_red:')
-zpk(C_i_red)
-
-% Plot Bode plots
 figure;
-bode(C0_e, 'r', C_e_min, 'b--');
+range = {1, 1000};
+bode(C_i_min, 'r', C_i_red, 'b--', range)
+
+figure;
+freq_range = {1, 10000};
+bode(C0_e, 'r', C_e_min, 'b--', freq_range);
+legend("Original", "Order 7");
+grid on;
 legend('C0_e', 'C_e_min');
 title('Bode Plot of Full and Simplified Controllers');
 
 figure;
+range = {1, 1000};
 bode(C_i_min, 'r', C_i_red, 'b--');
 legend('C_i_min', 'C_i_red');
 title('Bode Plot of Integral and Reduced Controllers');
+
+% figure;
+% sigma(C0_e, freq_range);
+% title('Singular Value Plot');
+% xlabel('Frequency (rad/s)');
+% ylabel('Singular Value (Amplitude)');
 
 % Plot pole-zero maps
 figure;
