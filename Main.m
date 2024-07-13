@@ -181,16 +181,14 @@ clc
 % Weighting filters
 %%%%%%%%%%%%%%%%%%%
 
-
-
 % Low-pass filter parameters W_1
-M = 1.5;           % high gain at low frequencies
+M = 1.5;                % high gain at low frequencies
 A = 0.001;        % zero gain at high frequencies
-mag_W_1 = 0.707;  % -3.01 dB at 4 rad/s
+mag_W_1 = db2mag(3.01);  % -3.01 dB at 4 rad/s
 freq_W_1 = 4.0;           % [rad/s]
 
 % High-pass filter parameters W_2, assume M_1 = A_2 , A_1 = M_2
-mag_W_2 = 0.177;    % -15 dB at -3.01dB bandwidth frequency
+mag_W_2 = db2mag(15);    % -15 dB at -3.01dB bandwidth frequency
 freq_W_2 = 151;           % freq where magnitude of actuator dynamics equals -3.01dB [rad/s]
 
 S_t     = tf([1 freq_W_1*A],[1/M freq_W_1]);
@@ -201,7 +199,7 @@ W_2     = ss(1/KS_t);
 W_2_tf  = tf(W_2);
 
 W_1 = tf(makeweight(1/A, [freq_W_1, mag_W_1], 1/M))
-W_2 = tf(makeweight(1/M, [freq_W_2, mag_W_1], 1/A))
+W_2 = tf(makeweight(1/M, [freq_W_2, mag_W_2], 1/A))
 figure;
 bode(W_1_tf, 'r', W_1, 'b')
 
@@ -210,11 +208,11 @@ bode(W_2_tf, 'r', W_2, 'b')
 %W_1_tf = tf([1 / M_1 omega_1], [1 omega_1 * A_1]);
 %W_2_tf = tf([1 omega_2/A_2], [M_2 omega_2]);
 
-[~, phase_margin, ~, ~] = margin(W_1_tf);
+[~, phase_margin, ~, ~] = margin(W_1);
 
 % Save the filters for later use
 save('W1.mat', 'W_1');
-%save('W2.mat', 'W_2');
+save('W2.mat', 'W_2');
 %%
 %clearvars -except G_a G_am G_m G_cl_q_unsc C_q C_sc G C_i_pm C_i_st S_t KS_t W_1 W_2
 
@@ -224,7 +222,7 @@ close all
 
 %Plot the filters' inverse gain
 figure;
-sigma(S_t, 'r', KS_t, 'b')
+sigma(1/W_1, 'r', 1/W_2, 'b')
 grid on;
 legend('1/W1', '1/W2');
 title('Inverse Gain of Weighting Filters');
@@ -317,7 +315,7 @@ opts = hinfsynOptions('RelTol', 1e-6);
 
 % Design the H-infinity controller using hinfsyn
 [C_e, T_wz, gamma] = hinfsyn(P, nmeas, nctrl, opts);
-
+gamma
 save('C_e.mat', 'C_e')
 
 % Compute the closed-loop transfer function with weights
@@ -364,7 +362,7 @@ close all
 mag_W_3 = db2mag(-3.01);  % -3.01 dB at 4 rad/s
 
 W_3 = tf(makeweight(1/A, [freq_W_1, mag_W_3], 1/M));
-
+%W_3 = W_1
 load_system('Design');
 
 % Specify the input and output points for linearization
@@ -439,10 +437,10 @@ poles_to_keep = original_poles([false true true true true true true true false])
 zeros_to_keep = original_zeros([false true true true true true true false]);
 
 % Create the new transfer function with the kept poles and zeros
-C_e_min = zpk(zeros_to_keep, poles_to_keep, db2mag(50));
+C_e_min = zpk(zeros_to_keep, poles_to_keep, db2mag(60));
 %C_i_min = minreal(tf(C_e_min * tf([1 0], 1)));
 poles_to_keep = original_poles([false true true true true true true false false]);
-C_i_min = zpk(zeros_to_keep, poles_to_keep, db2mag(50));
+C_i_min = zpk(zeros_to_keep, poles_to_keep, db2mag(60));
 
 R = reducespec(C_i_min,"balanced");
 figure;
@@ -490,7 +488,6 @@ model = 'ClosedLoop_Test';
 load_system(model);
 
 C_i = C_i_red;
-
 
 % Define the I/O points for linearization
 io(1) = linio([model '/r'], 1, 'input');   % Input r
@@ -650,7 +647,6 @@ subplot(2, 2, 2);
 step(T_o, t, 'b'); hold on; step(T_d, t, 'r'); title('Step Response of To and Td');
 legend('To', 'Td');
 
-
 subplot(2, 2, 3);
 step(SoG, t, 'b'); title('Step Response of SoG');
 legend('SoG');
@@ -707,82 +703,93 @@ disp(metrics_table);
 
 
 
-%% Part #3d - Feedback controller design (hinfstruct case)
+% %% Part #3d - Feedback controller design (hinfstruct case)
+% 
+% % Controller design
+% C_E_red = tunableTF('C_e_red', 2, 2) * tf(1, [1 0]);
+% 
+% opts = hinfstructOptions('RandomStart', 20, 'UseParallel', true, 'TolGain', 1e-5);
+% [C_E_red, gamma_red, ~] = hinfstruct(P, C_E_red, opts);
+% 
+% C_E_red = tf(C_E_red);
+% 
+% C_I_red = minreal(tf(C_E_red * tf([1 0], 1)));
+% 
+% T_wz_new = tf(lft(P, C_E_red, 1, 1));
+% 
+% % Compute norms for individual transfer functions
+% gamma_1_new = norm(T_wz_new(1,:), 'inf');
+% gamma_2_new = norm(T_wz_new(2,:), 'inf');
+% gamma_3_new = norm(T_wz_new(3,:), 'inf');
+% 
+% % Display individual performance levels
+% disp('Individual Performance Levels gamma_i:');
+% disp(['gamma_1: ', num2str(gamma_1_new)]);
+% disp(['gamma_2: ', num2str(gamma_2_new)]);
+% disp(['gamma_3: ', num2str(gamma_3_new)]);
+% 
+% %%
+% % Plot the singular values of T_wz and its individual components
+% figure;
+% hold on;
+% bode(C_i_min, 'b--');
+% bode(C_i_red, 'g--');
+% bode(C_I_red, 'magenta--')
+% 
+% legend('C_i_min (7 states hinfsys)', ...
+%        'C_i_red (2 states hinfsys)', ...
+%        'C_I_red (2 states hinfstruct))');
+% 
+% title('C_i stuff');
+% xlabel('Frequency (rad/s)');
+% ylabel('Gain stuff (Amplitude)');
+% hold off;
+% 
+% %% Part #3e - Feedforward controller design
+% F_f  = tf(1, 1); % Unitary gain
+% 
+% % Open the Simulink model
+% load_system('ClosedLoop_Red');
+% 
+% % Specify the input and output points for linearization
+% % io(1) = linio('ClosedLoop_Red/r', 1, 'input');
+% % io(2) = linio('ClosedLoop_Red/y1_out', 1, 'output');
+% 
+% % Linearize the model
+% T_o = linearize('ClosedLoop_Red');   % Here the uncertainties are neglected
+% T_o.InputName = {'r'};
+% T_o.OutputName = {'y1'};
+% 
+% % S_o = 1/(1+G_cl_q_sc*C_E_red);
+% % T_o = minreal(1 - S_o);
+% F_f = minreal(T_o * inv(T_d));
+% 
+% 
+% % Extract poles and zeros from the transfer function C0_e
+% original_poles = pole(F_f);
+% original_zeros = zero(F_f);
+% 
+% % Identify poles and zeros to keep based on the thresholds
+% poles_to_keep = original_poles([false false true true true true true false]);
+% zeros_to_keep = original_zeros([false true true true true true]);
+% 
+% % Create the new transfer function with the kept poles and zeros
+% F_f_min = zpk(zeros_to_keep, poles_to_keep, db2mag(12.345));
+% 
+% % Further reduce 
+% R = reducespec(F_f_min,"balanced");
+% F_f_red = getrom(R,Order=2);
 
-% Controller design
-C_E_red = tunableTF('C_e_red', 2, 2) * tf(1, [1 0]);
-
-opts = hinfstructOptions('RandomStart', 20, 'UseParallel', true, 'TolGain', 1e-5);
-[C_E_red, gamma_red, ~] = hinfstruct(P, C_E_red, opts);
-
-C_E_red = tf(C_E_red);
-
-C_I_red = minreal(tf(C_E_red * tf([1 0], 1)));
-
-T_wz_new = tf(lft(P, C_E_red, 1, 1));
-
-% Compute norms for individual transfer functions
-gamma_1_new = norm(T_wz_new(1,:), 'inf');
-gamma_2_new = norm(T_wz_new(2,:), 'inf');
-gamma_3_new = norm(T_wz_new(3,:), 'inf');
-
-% Display individual performance levels
-disp('Individual Performance Levels gamma_i:');
-disp(['gamma_1: ', num2str(gamma_1_new)]);
-disp(['gamma_2: ', num2str(gamma_2_new)]);
-disp(['gamma_3: ', num2str(gamma_3_new)]);
-
-%%
-% Plot the singular values of T_wz and its individual components
-figure;
-hold on;
-bode(C_i_min, 'b--');
-bode(C_i_red, 'g--');
-bode(C_I_red, 'magenta--')
-
-legend('C_i_min (7 states hinfsys)', ...
-       'C_i_red (2 states hinfsys)', ...
-       'C_I_red (2 states hinfstruct))');
-
-title('C_i stuff');
-xlabel('Frequency (rad/s)');
-ylabel('Gain stuff (Amplitude)');
-hold off;
-
-%% Part #3e - Feedforward controller design
-F_f  = tf(1, 1); % Unitary gain
-
-% Open the Simulink model
-load_system('ClosedLoop_Red');
-
-% Specify the input and output points for linearization
-% io(1) = linio('ClosedLoop_Red/r', 1, 'input');
-% io(2) = linio('ClosedLoop_Red/y1_out', 1, 'output');
-
-% Linearize the model
-T_o = linearize('ClosedLoop_Red');   % Here the uncertainties are neglected
-T_o.InputName = {'r'};
-T_o.OutputName = {'y1'};
-
-% S_o = 1/(1+G_cl_q_sc*C_E_red);
-% T_o = minreal(1 - S_o);
-F_f = minreal(T_o * inv(T_d));
 
 
-% Extract poles and zeros from the transfer function C0_e
-original_poles = pole(F_f);
-original_zeros = zero(F_f);
 
-% Identify poles and zeros to keep based on the thresholds
-poles_to_keep = original_poles([false false true true true true true false]);
-zeros_to_keep = original_zeros([false true true true true true]);
 
-% Create the new transfer function with the kept poles and zeros
-F_f_min = zpk(zeros_to_keep, poles_to_keep, db2mag(12.345));
 
-% Further reduce 
-R = reducespec(F_f_min,"balanced");
-F_f_red = getrom(R,Order=2);
+
+
+
+
+
 
 
 %%
