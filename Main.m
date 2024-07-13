@@ -368,8 +368,8 @@ W_3 = tf(makeweight(1/A, [freq_W_1, mag_W_3], 1/M));
 save('W3.mat', 'W_3')
 
 load_system('Design');
-io = load('io_Design.mat');
-
+io = load('io_Design.mat').io;
+%%
 % Linearize the model
 P = linearize('Design', io); 
 P.InputName = {'w', 'u'};
@@ -613,7 +613,7 @@ close all
 % Load the Simulink model
 model = 'ClosedLoop_Test';
 load_system(model);
-io = load('io_ClosedLoop_Test.mat');
+io = load('io_ClosedLoop_Test.mat').io;
 
 % Linearize the model
 T = linearize(model, io);
@@ -758,3 +758,6 @@ F_f  = tf(1, 1);
 % Open the ClosedLoop_Test Simulink model
 model = 'ClosedLoop_Test';
 open_system(model);
+
+io = load('io_ClosedLoop_Test').io;
+controlSystemDesigner(model);
