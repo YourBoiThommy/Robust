@@ -182,14 +182,19 @@ clc
 %%%%%%%%%%%%%%%%%%%
 
 % Low-pass filter parameters W_1
-M = 1.5;                % high gain at low frequencies
-A = 0.001;        % zero gain at high frequencies
-mag_W_1 = db2mag(3.01);  % -3.01 dB at 4 rad/s
+M = 1.5;                  % high gain at low frequencies while also ensuring PM above 30 degrees
+A = 0.001;                % zero gain at high frequencies
+mag_W_1 = db2mag(3.01);   % -3.01 dB at 4 rad/s
 freq_W_1 = 4.0;           % [rad/s]
 
 % High-pass filter parameters W_2, assume M_1 = A_2 , A_1 = M_2
-mag_W_2 = db2mag(15);    % -15 dB at -3.01dB bandwidth frequency
+mag_W_2 = db2mag(15);     % -15 dB at -3.01dB bandwidth frequency
 freq_W_2 = 151;           % freq where magnitude of actuator dynamics equals -3.01dB [rad/s]
+
+W_1 = tf(makeweight(1/A, [freq_W_1, mag_W_1], 1/M));
+W_2 = tf(makeweight(1/M, [freq_W_2, mag_W_2], 1/A));
+
+PM = rad2deg(2*asin(1/(2*M))); %Yields a PM of 38.94 degrees
 
 S_t     = tf([1 freq_W_1*A],[1/M freq_W_1]);
 W_1     = ss(1/S_t);
@@ -197,28 +202,6 @@ W_1_tf  = tf(W_1);
 KS_t     = tf([A freq_W_2],[1 freq_W_2/M]);
 W_2     = ss(1/KS_t);
 W_2_tf  = tf(W_2);
-
-W_1 = tf(makeweight(1/A, [freq_W_1, mag_W_1], 1/M))
-W_2 = tf(makeweight(1/M, [freq_W_2, mag_W_2], 1/A))
-figure;
-bode(W_1_tf, 'r', W_1, 'b')
-
-figure;
-bode(W_2_tf, 'r', W_2, 'b')
-%W_1_tf = tf([1 / M_1 omega_1], [1 omega_1 * A_1]);
-%W_2_tf = tf([1 omega_2/A_2], [M_2 omega_2]);
-
-[~, phase_margin, ~, ~] = margin(W_1);
-
-% Save the filters for later use
-save('W1.mat', 'W_1');
-save('W2.mat', 'W_2');
-%%
-%clearvars -except G_a G_am G_m G_cl_q_unsc C_q C_sc G C_i_pm C_i_st S_t KS_t W_1 W_2
-
-%%
-close all
-
 
 %Plot the filters' inverse gain
 figure;
@@ -228,6 +211,19 @@ legend('1/W1', '1/W2');
 title('Inverse Gain of Weighting Filters');
 xlabel('Frequency (rad/s)');
 ylabel('Magnitude (dB)');
+
+figure;
+bode(W_1_tf, 'r', W_1, 'b')
+
+figure;
+bode(W_2_tf, 'r', W_2, 'b')
+%W_1_tf = tf([1 / M_1 omega_1], [1 omega_1 * A_1]);
+%W_2_tf = tf([1 omega_2/A_2], [M_2 omega_2]);
+
+% Save the filters for later use
+save('W1.mat', 'W_1');
+save('W2.mat', 'W_2');
+
 
 %% Part #3B.1 – Reference model computation (5%)
 
@@ -359,7 +355,7 @@ disp(norm_T_wz_inf);
 clear io 
 close all
 % Tune magnitude for parameter W_3
-mag_W_3 = db2mag(-3.01);  % -3.01 dB at 4 rad/s
+mag_W_3 = db2mag(8.25);  % at -8.25 dB gamma_1 reaches exactly 1
 
 W_3 = tf(makeweight(1/A, [freq_W_1, mag_W_3], 1/M));
 %W_3 = W_1
@@ -437,10 +433,10 @@ poles_to_keep = original_poles([false true true true true true true true false])
 zeros_to_keep = original_zeros([false true true true true true true false]);
 
 % Create the new transfer function with the kept poles and zeros
-C_e_min = zpk(zeros_to_keep, poles_to_keep, db2mag(60));
+C_e_min = zpk(zeros_to_keep, poles_to_keep, db2mag(30));
 %C_i_min = minreal(tf(C_e_min * tf([1 0], 1)));
 poles_to_keep = original_poles([false true true true true true true false false]);
-C_i_min = zpk(zeros_to_keep, poles_to_keep, db2mag(60));
+C_i_min = zpk(zeros_to_keep, poles_to_keep, db2mag(30));
 
 R = reducespec(C_i_min,"balanced");
 figure;
@@ -454,7 +450,7 @@ disp('Reduced Integral Controller C_i_red: ')
 zpk(C_i_red)
 
 figure;
-freq_range = {0.0001, 1000000};
+freq_range = {1, 100000};
 bode(C0_e, 'r', C_e_min, 'b--', freq_range);
 legend("Original", "Order 7");
 grid on;
