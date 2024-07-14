@@ -298,10 +298,13 @@ save('io_Design.mat', 'io')
 % Linearize the model
 P = linearize('Design', io);  
 P.InputName = {'w', 'u'};
-P.OutputName = {'w1', 'w2', 'w3', 'v'};
+P.OutputName = {'z1', 'z2', 'z3', 'v'};
 
 save('P.mat', 'P');
+zpk(P)
+zpk(G)
 
+%%
 % Define the number of measurements and controls
 nmeas = 1; % Number of measurements (outputs to the controller)
 nctrl = 1; % Number of controls (inputs from the controller)
@@ -368,7 +371,18 @@ io = load('io_Design.mat').io;
 % Linearize the model
 P = linearize('Design', io); 
 P.InputName = {'w', 'u'};
-P.OutputName = {'w1', 'w2', 'w3', 'v'};
+P.OutputName = {'z1', 'z2', 'z3', 'v'};
+
+
+
+zpk(G)
+zpk(W_1)
+zpk(W_2)
+
+
+
+
+
 
 % Design the H-infinity controller using hinfsyn
 [C_e, T_wz, gamma] = hinfsyn(P, nmeas, nctrl, opts);
@@ -428,11 +442,17 @@ original_zeros = zero(C0_e);
 poles_to_keep = original_poles([false true true true true true true true false]);
 zeros_to_keep = original_zeros([false true true true true true true false]);
 
+gain_pole = 1/abs(original_poles(1));
+gain_zero = abs(original_zeros(1));
+
+k_new = k * gain_pole * gain_zero;
+
 % Create the new transfer function with the kept poles and zeros
-C_e_min = zpk(zeros_to_keep, poles_to_keep, db2mag(28));
-%C_i_min = minreal(tf(C_e_min * tf([1 0], 1)));
+C_e_min = zpk(zeros_to_keep, poles_to_keep, k_new);
+[z, p, k] = zpkdata(C_e_min,'v');
+
 poles_to_keep = original_poles([false true true true true true true false false]);
-C_i_min = zpk(zeros_to_keep, poles_to_keep, db2mag(28));
+C_i_min = zpk(zeros_to_keep, poles_to_keep, k);
 
 R = reducespec(C_i_min,"balanced");
 figure;
@@ -545,59 +565,11 @@ sigma(C_e, 'r', C_e_red, 'b');
 title('Singular Values: Ce, Ce_{red}');
 legend('Ce', 'Ce_{red}');
 
-% Annotate the plots
-% (Optional) Add annotations for critical frequency points if needed
-
-% Compute norms for individual transfer functions
-gamma_1 = norm(T_r_to_e1, 'inf');
-gamma_2 = norm(T_r_to_u, 'inf');
-gamma_3 = norm(T_r_to_e1_d, 'inf');
-
-% Display individual performance levels
-disp('Individual Performance Levels gamma_i:');
-disp(['gamma_1: ', num2str(gamma_1)]);
-disp(['gamma_2: ', num2str(gamma_2)]);
-disp(['gamma_3: ', num2str(gamma_3)]);
-
-% Verify the global performance level
-norm_T_inf = norm(T, 'inf');
-disp('Global Performance Level (norm of T):');
-disp(norm_T_inf);
 
 % Break the loop at the input of the actuator (u_p) and output (y)
 io_open(1) = linio('OpenLoop_Test/In', 1, 'input');
 io_open(2) = linio('OpenLoop_Test/Gain', 1, 'output');
 open_loop_tf = linearize('OpenLoop_Test', io_open);
-
-% figure;
-% bode(open_loop_tf);
-% margin(open_loop_tf);
-% title('Bode Plot of the Open Loop Transfer Function');
-% xlabel('Frequency (rad/s)');
-% ylabel('Magnitude (dB) / Phase (deg)');
-% 
-% % Compute gain and phase margins
-% [Gm, Pm, Wcg, Wcp] = margin(open_loop_tf);
-% disp(['Gain Margin (dB): ', num2str(20*log10(Gm))]);
-% disp(['Phase Margin (deg): ', num2str(Pm)]);
-% disp(['Gain Crossover Frequency (rad/s): ', num2str(Wcg)]);
-% disp(['Phase Crossover Frequency (rad/s): ', num2str(Wcp)]);
-% 
-% % Compute delay margin
-% DM = Pm / (180/pi) / Wcg;  % Convert PM from degrees to radians
-% DM_ms = DM * 1000;  % Convert from seconds to milliseconds
-% disp(['Delay Margin (ms): ', num2str(DM_ms)]);
-% 
-% % Annotate the gain at 300 rad/s
-% hold on;
-% gain_at_300_mag = bode(open_loop_tf, 300);
-% gain_at_300_db = 20*log10(gain_at_300_mag);
-% ax = findall(gcf, 'Type', 'axes'); % find all axes in the figure
-% % Plot the gain point on the magnitude subplot
-% axes(ax(2)); % select the magnitude plot (2nd subplot)
-% plot(300, gain_at_300_db, 'ro'); % mark the gain at 300 rad/s
-% text(300, gain_at_300_db, ['Gain at 300 rad/s: ', num2str(gain_at_300_db), ' dB']);
-% hold off;
 
 figure;
 h = bodeplot(open_loop_tf);
@@ -628,6 +600,7 @@ axes(mag_ax);
 plot(300, gain_at_300_db, 'ro'); % mark the gain at 300 rad/s
 text(300, gain_at_300_db, ['Gain at 300 rad/s: ', num2str(gain_at_300_db), ' dB'], 'VerticalAlignment', 'bottom');
 hold off;
+
 %% Part #3C.3 Exercise 3
 clc
 close all
@@ -767,26 +740,19 @@ hold off;
 
 %% Cell Part %4
 clear
+% Load all relevant data
 load('G_a.mat'); load('G_m.mat'); load('C_q.mat'); load('C_sc.mat'); load('W1.mat'); load('W2.mat'); load('W3.mat');  
-
 C_i = load('C_I_red.mat').C_I_red; 
 T_d = load('T_d.mat').T_d;
+
 % Initialize feedforward controller Ff to unity
 F_f  = tf(1, 1);
 
 % Right now the maximum achievable attenuation is -17dB but -30dB should be
 % attainable, first let's change W_3
-mag_W_3 = db2mag(30); 
+mag_W_3 = db2mag(31); 
 
 W_3 = tf(makeweight(1/0.001, [4, mag_W_3], 1/1.9));
-
-% Open the ClosedLoop_Test Simulink model
-%model = 'ClosedLoop_Test.slx';
-%open_system(model);
-
-%io = load('io_ClosedLoop_Test').io;
-%controlSystemDesigner(model);
-
 
 % Create system data with slTuner interface
 TunedBlocks = {'ClosedLoop_Test/C_i/LTI System'};
@@ -838,7 +804,7 @@ Tm.Name = 'Tm'; % Tuning goal name
 
 % Create option set for systune command
 Options = systuneOptions();
-Options.RandomStart = 20; % Number of randomized starts
+Options.RandomStart = 30; % Number of randomized starts
 Options.UseParallel = true; % Parallel processing flag
 
 % Set soft and hard goals
@@ -849,22 +815,25 @@ HardGoals = [ So ; ...
 
 % Tune the parameters with soft and hard goals
 [CL1,fSoft,gHard,Info] = systune(CL0,SoftGoals,HardGoals,Options);
-%%
-info
-%% 
+
 %% View tuning results
 % viewSpec([SoftGoals;HardGoals],CL1);
 
-Numerator = [24.216872230845830,6.053136354472549e+02,1.015026654721144e+04];
-Denominator = [1,46.227297422758760,1.132754084337495e+03];
+getBlockValue(CL1,'C')
 
+%%
+Numerator = [26.780513435714976,7.264664166702048e+02,1.233894195762681e+04];
+Denominator = [1,53.275177212832276,1.367670325448250e+03];
+close all;
+zpk(C_i)
 C_sharp_I_red = tf(Numerator, Denominator);
 C_i = C_sharp_I_red; 
-
+zpk(C_sharp_I_red)
 figure;
 hold on;
 pzmap(load('C_I_red.mat').C_I_red)
 pzmap(C_sharp_I_red)
+legend('$C_{i, red}^*$ (hinfstruct)', 'C$_{i, red}^\#$ (systune)', 'interpreter','latex')
 hold off;
 
 % Load the Simulink model
@@ -921,7 +890,7 @@ metrics_table = table({'So', 'SoG', 'Td', 'To', 'Tr -> \omega_m'}', ...
 disp(metrics_table);
 
 % Display individual performance levels
-disp('Individual Performance Levels gamma_i:');
-disp(['gamma_1: ', num2str(gHard(1))]);
-disp(['gamma_2: ', num2str(gHard(2))]);
-disp(['gamma_3: ', num2str(gHard(3))]);
+%disp('Individual Performance Levels gamma_i:');
+%disp(['gamma_1: ', num2str(gHard(1))]);
+%disp(['gamma_2: ', num2str(gHard(2))]);
+%disp(['gamma_3: ', num2str(gHard(3))]);
