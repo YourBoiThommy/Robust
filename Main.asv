@@ -179,7 +179,7 @@ clc
 %%%%%%%%%%%%%%%%%%%
 
 % Low-pass filter parameters W_1
-M = 1.5;                  % high gain at low frequencies while also ensuring PM above 30 degrees
+M = 1.9;                  % high gain at low frequencies while also ensuring PM above 30 degrees
 A = 0.001;                % zero gain at high frequencies
 mag_W_1 = db2mag(3.01);   % -3.01 dB at 4 rad/s
 freq_W_1 = 4.0;           % [rad/s]
@@ -276,17 +276,13 @@ xline(S.SettlingTime, '--', 'Settling Time');
 % Save the reference model
 save('T_d.mat', 'T_d');
 
-%clearvars -except G_a G_am G_m G_cl_q_unsc C_q C_sc G C_i_pm C_i_st W_1_tf W_2_tf W_1 W_2 T_d
-
-
-%% Part #3c - Feedback controller design (hinfsyn case)
+%% Part 3C.1 - Feedback controller design (hinfsyn case)
 clc 
 clear io
 % Low-pass filter parameters W_3
 W_3 = W_1; % Set W3 equal to W1 for relaxed model following constraint
 
-% Either linearize or use the proof of exercise 2, both give obviously the same answer
-% Open the Simulink model
+% Open model
 load_system('Design');
 
 % Specify the input and output points for linearization
@@ -297,14 +293,14 @@ io(4) = linio('Design/W_2', 1, 'output');
 io(5) = linio('Design/W_3', 1, 'output');
 io(6) = linio('Design/Sum2', 1, 'output');
 
+save('io_Design.mat', 'io')
+
 % Linearize the model
-P = linearize('Design', io);   % Here the uncertainties are neglected
+P = linearize('Design', io);  
 P.InputName = {'w', 'u'};
 P.OutputName = {'w1', 'w2', 'w3', 'v'};
 
 save('P.mat', 'P');
-
-%% 3C.1 Exercise 3
 
 % Define the number of measurements and controls
 nmeas = 1; % Number of measurements (outputs to the controller)
@@ -315,7 +311,7 @@ opts = hinfsynOptions('RelTol', 1e-6);
 
 % Design the H-infinity controller using hinfsyn
 [C_e, T_wz, gamma] = hinfsyn(P, nmeas, nctrl, opts);
-gamma
+
 save('C_e.mat', 'C_e')
 
 % Compute the closed-loop transfer function with weights
@@ -359,24 +355,18 @@ disp(norm_T_wz_inf);
 clear io 
 close all
 % Tune magnitude for parameter W_3
-mag_W_3 = db2mag(8.25);  % at -8.25 dB gamma_1 reaches exactly 1
+%mag_W_3 = db2mag(8.25);  % at -8.25 dB gamma_1 reaches exactly 1
+mag_W_3 = db2mag(17); 
 
 W_3 = tf(makeweight(1/A, [freq_W_1, mag_W_3], 1/M));
 
 save('W3.mat', 'W_3')
 
 load_system('Design');
-
-% Specify the input and output points for linearization
-io(1) = linio('Design/w', 1, 'input');
-io(2) = linio('Design/u', 1, 'input');
-io(3) = linio('Design/W_1', 1, 'output');
-io(4) = linio('Design/W_2', 1, 'output');
-io(5) = linio('Design/W_3', 1, 'output');
-io(6) = linio('Design/Sum2', 1, 'output');
+io = load('io_Design.mat').io;
 
 % Linearize the model
-P = linearize('Design', io);   % Here the uncertainties are neglected
+P = linearize('Design', io); 
 P.InputName = {'w', 'u'};
 P.OutputName = {'w1', 'w2', 'w3', 'v'};
 
@@ -439,10 +429,10 @@ poles_to_keep = original_poles([false true true true true true true true false])
 zeros_to_keep = original_zeros([false true true true true true true false]);
 
 % Create the new transfer function with the kept poles and zeros
-C_e_min = zpk(zeros_to_keep, poles_to_keep, db2mag(30));
+C_e_min = zpk(zeros_to_keep, poles_to_keep, db2mag(28));
 %C_i_min = minreal(tf(C_e_min * tf([1 0], 1)));
 poles_to_keep = original_poles([false true true true true true true false false]);
-C_i_min = zpk(zeros_to_keep, poles_to_keep, db2mag(30));
+C_i_min = zpk(zeros_to_keep, poles_to_keep, db2mag(28));
 
 R = reducespec(C_i_min,"balanced");
 figure;
@@ -456,7 +446,7 @@ disp('Reduced Integral Controller C_i_red: ')
 zpk(C_i_red)
 
 figure;
-freq_range = {1, 100000};
+freq_range = {1, 50000};
 bode(C0_e, 'r', C_e_min, 'b--', freq_range);
 legend("Original", "Order 7");
 grid on;
@@ -490,6 +480,7 @@ model = 'ClosedLoop_Test';
 load_system(model);
 
 C_i = C_i_red;
+C_e_red = C_i_red * 1/(tf('s'));
 
 % Define the I/O points for linearization
 io(1) = linio([model '/r'], 1, 'input');   % Input r
@@ -500,6 +491,8 @@ io(5) = linio([model '/Demux1'], 1, 'output'); % Output y1
 io(6) = linio([model '/Sum1'], 1, 'output'); % Output e1_d
 io(7) = linio([model '/Sum2'], 1, 'output'); % Output udot_m
 io(8) = linio([model '/Demux'], 2, 'output'); % Output u_p
+
+save('io_ClosedLoop_Test.mat', 'io')
 
 % Linearize the model
 T = linearize(model, io);
@@ -538,7 +531,7 @@ title('Singular Values: W3^{-1}, T_m');
 legend('W3^{-1}', 'T_m');
 
 subplot(2,3,4);
-sigma(-T_di_to_u, 'b', T_r_to_y1, 'g');
+sigma(T_di_to_u, 'b', T_r_to_y1, 'g');
 title('Singular Values: T_i, T_o');
 legend('T_i', 'T_o');
 
@@ -548,7 +541,7 @@ title('Singular Values: SoG');
 legend('SoG');
 
 subplot(2,3,6);
-sigma(C_e, 'r', C_e_min, 'b');
+sigma(C_e, 'r', C_e_red, 'b');
 title('Singular Values: Ce, Ce_{red}');
 legend('Ce', 'Ce_{red}');
 
@@ -571,25 +564,45 @@ norm_T_inf = norm(T, 'inf');
 disp('Global Performance Level (norm of T):');
 disp(norm_T_inf);
 
-%%
-% Load the OpenLoop_Test Simulink model
-
-% Define the I/O points for linearization
 % Break the loop at the input of the actuator (u_p) and output (y)
 io_open(1) = linio('OpenLoop_Test/In', 1, 'input');
 io_open(2) = linio('OpenLoop_Test/Gain', 1, 'output');
-
-% Linearize the model
 open_loop_tf = linearize('OpenLoop_Test', io_open);
 
-% Plot the Bode plot to analyze gain and phase margins
-figure;
-[mag, phase, wout] = bode(open_loop_tf);
-margin(open_loop_tf);
-title('Bode Plot of the Open Loop Transfer Function');
-xlabel('Frequency (rad/s)');
-ylabel('Magnitude (dB) / Phase (deg)');
+% figure;
+% bode(open_loop_tf);
+% margin(open_loop_tf);
+% title('Bode Plot of the Open Loop Transfer Function');
+% xlabel('Frequency (rad/s)');
+% ylabel('Magnitude (dB) / Phase (deg)');
+% 
+% % Compute gain and phase margins
+% [Gm, Pm, Wcg, Wcp] = margin(open_loop_tf);
+% disp(['Gain Margin (dB): ', num2str(20*log10(Gm))]);
+% disp(['Phase Margin (deg): ', num2str(Pm)]);
+% disp(['Gain Crossover Frequency (rad/s): ', num2str(Wcg)]);
+% disp(['Phase Crossover Frequency (rad/s): ', num2str(Wcp)]);
+% 
+% % Compute delay margin
+% DM = Pm / (180/pi) / Wcg;  % Convert PM from degrees to radians
+% DM_ms = DM * 1000;  % Convert from seconds to milliseconds
+% disp(['Delay Margin (ms): ', num2str(DM_ms)]);
+% 
+% % Annotate the gain at 300 rad/s
+% hold on;
+% gain_at_300_mag = bode(open_loop_tf, 300);
+% gain_at_300_db = 20*log10(gain_at_300_mag);
+% ax = findall(gcf, 'Type', 'axes'); % find all axes in the figure
+% % Plot the gain point on the magnitude subplot
+% axes(ax(2)); % select the magnitude plot (2nd subplot)
+% plot(300, gain_at_300_db, 'ro'); % mark the gain at 300 rad/s
+% text(300, gain_at_300_db, ['Gain at 300 rad/s: ', num2str(gain_at_300_db), ' dB']);
+% hold off;
 
+figure;
+h = bodeplot(open_loop_tf);
+hold on;
+margin(open_loop_tf);
 % Compute gain and phase margins
 [Gm, Pm, Wcg, Wcp] = margin(open_loop_tf);
 disp(['Gain Margin (dB): ', num2str(20*log10(Gm))]);
@@ -603,29 +616,25 @@ DM_ms = DM * 1000;  % Convert from seconds to milliseconds
 disp(['Delay Margin (ms): ', num2str(DM_ms)]);
 
 % Annotate the gain at 300 rad/s
-hold on;
-gain_at_300_rad_s = bode(open_loop_tf, 300);
-gain_at_300_db = 20*log10(gain_at_300_rad_s);
-plot(300, gain_at_300_db, 'ro'); % mark the gain at 300 rad/s
-text(300, gain_at_300_db, ['Gain at 300 rad/s: ', num2str(gain_at_300_db), ' dB']);
-hold off;
+[mag, ~, wout] = bode(open_loop_tf, 300); % get magnitude at 300 rad/s
+gain_at_300_db = round(20*log10(mag), 2);
 
+% Get the axes handle for the magnitude plot
+ax = getaxes(h);
+mag_ax = ax(1);
+
+% Plot the gain point on the magnitude subplot
+axes(mag_ax);
+plot(300, gain_at_300_db, 'ro'); % mark the gain at 300 rad/s
+text(300, gain_at_300_db, ['Gain at 300 rad/s: ', num2str(gain_at_300_db), ' dB'], 'VerticalAlignment', 'bottom');
+hold off;
 %% Part #3C.3 Exercise 3
 clc
 close all
 % Load the Simulink model
 model = 'ClosedLoop_Test';
 load_system(model);
-
-% Define the I/O points for linearization
-io(1) = linio([model '/r'], 1, 'input');   % Input r
-io(2) = linio([model '/d_i'], 1, 'input'); % Input d_i
-io(3) = linio([model '/Sum3'], 1, 'output'); % Output e1
-io(4) = linio([model '/C_i'], 1, 'output');  % Output u
-io(5) = linio([model '/Demux1'], 1, 'output'); % Output y1
-io(6) = linio([model '/Sum1'], 1, 'output'); % Output e1_d
-io(7) = linio([model '/Sum2'], 1, 'output'); % Output udot_m
-io(8) = linio([model '/Demux'], 2, 'output'); % Output u_p
+io = load('io_ClosedLoop_Test.mat').io;
 
 % Linearize the model
 T = linearize(model, io);
@@ -637,7 +646,7 @@ Tr_udot_m = T(6,1); % T(6,1)
 SoG = T(3,2);  % T(3,2) = SoG
 
 % Time vector for simulation
-t = linspace(0, 5, 1000);
+t = linspace(0, 1, 1000);
 
 % Step response plots
 figure;
@@ -660,11 +669,11 @@ ylabel('Degrees/Second');
 hold off;
 
 % Use the stepinfo function to obtain the desired metrics
-info_So = stepinfo(So);
-info_SoG = stepinfo(SoG);
-info_Td = stepinfo(T_d);
-info_To = stepinfo(T_o);
-info_Tr_udot_m = stepinfo(Tr_udot_m * (180/pi));
+info_So = stepinfo(So,'SettlingTimeThreshold', 5/100);
+info_SoG = stepinfo(SoG,'SettlingTimeThreshold', 5/100);
+info_Td = stepinfo(T_d,'SettlingTimeThreshold', 5/100);
+info_To = stepinfo(T_o,'SettlingTimeThreshold', 5/100);
+info_Tr_udot_m = stepinfo(Tr_udot_m* (180/pi),'SettlingTimeThreshold', 5/100);
 
 % Display the metrics in a table
 metrics_table = table({'So', 'SoG', 'Td', 'To', 'Tr -> \omega_m'}', ...
@@ -721,7 +730,6 @@ xlabel('Frequency (rad/s)');
 ylabel('Gain stuff (Amplitude)');
 hold off;
 
-%%
 % %% Part #3e - Feedforward controller design
 % F_f  = tf(1, 1); % Unitary gain
 % 
@@ -733,7 +741,7 @@ hold off;
 % % io(2) = linio('ClosedLoop_Red/y1_out', 1, 'output');
 % 
 % % Linearize the model
-% T_o = linearize('ClosedLoop_Red');   % Here the uncertainties are neglected
+% T_o = linearize('ClosedLoop_Red');   
 % T_o.InputName = {'r'};
 % T_o.OutputName = {'y1'};
 % 
@@ -757,16 +765,157 @@ hold off;
 % R = reducespec(F_f_min,"balanced");
 % F_f_red = getrom(R,Order=2);
 
-%%
+%% Cell Part %4
 clear
 load('G_a.mat'); load('G_m.mat'); load('C_q.mat'); load('C_sc.mat'); load('W1.mat'); load('W2.mat'); load('W3.mat');  
 
-% Initialize feedback controller Ci with the one obtained from Question 3D.1
-Ci = load('C_I_red.mat');  % Assume Ci is saved in this file
-
+C_i = load('C_I_red.mat').C_I_red; 
+T_d = load('T_d.mat').T_d;
 % Initialize feedforward controller Ff to unity
 F_f  = tf(1, 1);
 
+% Right now the maximum achievable attenuation is -17dB but -30dB should be
+% attainable, first let's change W_3
+mag_W_3 = db2mag(30); 
+
+W_3 = tf(makeweight(1/0.001, [4, mag_W_3], 1/1.9));
+
 % Open the ClosedLoop_Test Simulink model
+%model = 'ClosedLoop_Test.slx';
+%open_system(model);
+
+%io = load('io_ClosedLoop_Test').io;
+%controlSystemDesigner(model);
+
+
+% Create system data with slTuner interface
+TunedBlocks = {'ClosedLoop_Test/C_i/LTI System'};
+AnalysisPoints = {'ClosedLoop_Test/r/1'; ...
+                  'ClosedLoop_Test/C_i/1'; ...
+                  'ClosedLoop_Test/Demux1/1'; ...
+                  'ClosedLoop_Test/Reference Model/1'; ...
+                  'ClosedLoop_Test/Sum1/1'; ...
+                  'ClosedLoop_Test/Sum3/1'};
+% Specify the custom options
+Options = slTunerOptions('AreParamsTunable',false);
+% Create the slTuner object
+CL0 = slTuner('ClosedLoop_Test',TunedBlocks,AnalysisPoints,Options);
+
+ClosedLoop_Test_C_i_LTI_System = tunableTF('ClosedLoop_Test_C_i_LTI_System',2,2);
+ClosedLoop_Test_C_i_LTI_System.Numerator.Value = [26.8830773604334 783.409142396318 12264.8389344962];
+ClosedLoop_Test_C_i_LTI_System.Denominator.Value = [1 62.9461536531052 1590.02149251343];
+setBlockParam(CL0,'ClosedLoop_Test/C_i/LTI System',ClosedLoop_Test_C_i_LTI_System);
+
+% Create tuning goal to limit gain of an I/O transfer function
+% Inputs and outputs
+Inputs = {'ClosedLoop_Test/r/1[r]'};
+Outputs = {'ClosedLoop_Test/Sum3/1[e1]'};
+% Tuning goal specifications
+MaxGain = 1/W_1; % Maximum gain as a function of frequency
+% Create tuning goal for gain
+So = TuningGoal.Gain(Inputs,Outputs,MaxGain);
+So.Name = 'So'; % Tuning goal name
+
+% Create tuning goal to limit gain of an I/O transfer function
+% Inputs and outputs
+Inputs = {'ClosedLoop_Test/r/1[r]'};
+Outputs = {'ClosedLoop_Test/C_i/1[u]'};
+% Tuning goal specifications
+MaxGain = 1/W_2; % Maximum gain as a function of frequency
+% Create tuning goal for gain
+CeSo = TuningGoal.Gain(Inputs,Outputs,MaxGain);
+CeSo.Name = 'CeSo'; % Tuning goal name
+
+% Create tuning goal to limit gain of an I/O transfer function
+% Inputs and outputs
+Inputs = {'ClosedLoop_Test/r/1[r]'};
+Outputs = {'ClosedLoop_Test/Sum1/1[e1_d]'};
+% Tuning goal specifications
+MaxGain = 1/W_3; % Maximum gain as a function of frequency
+% Create tuning goal for gain
+Tm = TuningGoal.Gain(Inputs,Outputs,MaxGain);
+Tm.Name = 'Tm'; % Tuning goal name
+
+% Create option set for systune command
+Options = systuneOptions();
+Options.RandomStart = 20; % Number of randomized starts
+Options.UseParallel = true; % Parallel processing flag
+
+% Set soft and hard goals
+SoftGoals = [];
+HardGoals = [ So ; ...
+              CeSo ; ...
+              Tm ];
+
+% Tune the parameters with soft and hard goals
+[CL1,fSoft,gHard,Info] = systune(CL0,SoftGoals,HardGoals,Options);
+%%
+info
+%% 
+%% View tuning results
+% viewSpec([SoftGoals;HardGoals],CL1);
+
+Numerator = [24.216872230845830,6.053136354472549e+02,1.015026654721144e+04];
+Denominator = [1,46.227297422758760,1.132754084337495e+03];
+
+C_sharp_I_red = tf(Numerator, Denominator);
+C_i = C_sharp_I_red; 
+
+figure;
+hold on;
+pzmap(load('C_I_red.mat').C_I_red)
+pzmap(C_sharp_I_red)
+hold off;
+
+% Load the Simulink model
 model = 'ClosedLoop_Test';
-open_system(model);
+load_system(model);
+io = load('io_ClosedLoop_Test.mat').io;
+
+% Linearize the model
+T = linearize(model, io);
+
+% Extract required transfer functions
+So = T(1,1);   % T(1,1) = S_o
+T_o = T(3,1);   % T(3,1) = T_o
+Tr_udot_m = T(6,1); % T(6,1)
+SoG = T(3,2);  % T(3,2) = SoG
+
+% Time vector for simulation
+t = linspace(0, 1, 1000);
+
+% Step response plots
+figure;
+subplot(2, 2, 1);
+step(So, t, 'b'); title('Step Response of So');
+legend('So');
+
+subplot(2, 2, 2);
+step(T_o, t, 'b'); hold on; step(T_d, t, 'r'); title('Step Response of To and Td');
+legend('To', 'Td');
+
+subplot(2, 2, 3);
+step(SoG, t, 'b'); title('Step Response of SoG');
+legend('SoG');
+
+subplot(2, 2, 4);
+step(Tr_udot_m * (180/pi), t, 'b'); title('Step Response of Tr -> \omega_m');
+legend('Tr -> \omega_m');
+ylabel('Degrees/Second');
+hold off;
+
+% Use the stepinfo function to obtain the desired metrics
+info_So = stepinfo(So,'SettlingTimeThreshold', 5/100);
+info_SoG = stepinfo(SoG,'SettlingTimeThreshold', 5/100);
+info_Td = stepinfo(T_d,'SettlingTimeThreshold', 5/100);
+info_To = stepinfo(T_o,'SettlingTimeThreshold', 5/100);
+info_Tr_udot_m = stepinfo(Tr_udot_m* (180/pi),'SettlingTimeThreshold', 5/100);
+
+% Display the metrics in a table
+metrics_table = table({'So', 'SoG', 'Td', 'To', 'Tr -> \omega_m'}', ...
+    [info_So.RiseTime, info_SoG.RiseTime, info_Td.RiseTime, info_To.RiseTime, info_Tr_udot_m.RiseTime]', ...
+    [info_So.SettlingTime, info_SoG.SettlingTime, info_Td.SettlingTime, info_To.SettlingTime, info_Tr_udot_m.SettlingTime]', ...
+    [info_So.Peak, info_SoG.Peak, info_Td.Peak, info_To.Peak, info_Tr_udot_m.Peak]', ...
+    'VariableNames', {'TransferFunction', 'RiseTime', 'SettlingTime', 'Peak'});
+
+disp(metrics_table);
