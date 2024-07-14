@@ -63,7 +63,7 @@ G_cl_q_unsc.OutputName = {'y1'};
 
 save('C_q.mat', 'C_q') 
 
-%% Scaling Gain Design (5%)
+% Scaling Gain Design (5%)
 clc 
 
 % Compute the Scaling Gain Csc
@@ -89,7 +89,7 @@ save('C_sc.mat', 'C_sc')
 save('G.mat', 'G') 
 
 
-%% Integral Gain Design (10%) sisotool
+% Integral Gain Design (10%) sisotool
 
 % Load Simulink model
 load_system('ClosedLoop_CqCscCi');
@@ -109,7 +109,7 @@ C_i_pm = 6.2658; % sisotool gives a C_i value of 6.2658 to guarantee 60 degrees 
 
 save('C_i_pm.mat', 'C_i_pm')
 
-%% Integral Gain Design (10%) settling time C_i_st
+% Integral Gain Design (10%) settling time C_i_st
 
 % % Define the initial value of C_i and the increment
 % C_i_initial = 5;
@@ -151,7 +151,7 @@ fprintf('Phase Margin: %.2f degrees\n', 61.9);
 save('C_i_st', 'C_i_st')
 
 %clearvars -except G_a G_am G_m G_cl_q_unsc C_q C_sc G C_i_pm C_i_st
-%% Ploting
+% Ploting
 s = zpk('s');
 
 T1 = feedback(G * C_i_pm / s, 1, -1);
@@ -303,6 +303,9 @@ P.OutputName = {'z1', 'z2', 'z3', 'v'};
 save('P.mat', 'P');
 zpk(P)
 zpk(G)
+zpk(W_1)
+zpk(W_2)
+
 
 %%
 % Define the number of measurements and controls
@@ -314,7 +317,7 @@ opts = hinfsynOptions('RelTol', 1e-6);
 
 % Design the H-infinity controller using hinfsyn
 [C_e, T_wz, gamma] = hinfsyn(P, nmeas, nctrl, opts);
-
+gamma
 save('C_e.mat', 'C_e')
 
 % Compute the closed-loop transfer function with weights
@@ -323,7 +326,7 @@ T_o = 1 - S_o;
 %T_wz = [W_1 * S_o; W_2 * C_e * S_o; W_3 * (T_d - T_o)]
 
 % Define the frequency range
-freq_range = {1, 300}; % Frequency range from 1 to 300 rad/s
+freq_range = {0.001, 10000}; % Frequency range from 1 to 300 rad/s
 
 % Plot the singular values of T_wz and its individual components
 figure;
@@ -332,10 +335,10 @@ hold on;
 sigma(T_wz(1,:), freq_range, 'r--');
 sigma(T_wz(2,:), freq_range, 'g--');
 sigma(T_wz(3,:), freq_range, 'b--');
-legend('\sigma(T_{wz})', '\sigma(T_{wz1})', '\sigma(T_{wz2})', '\sigma(T_{wz3})');
+legend('$\sigma(T_{wz})$', '$\sigma(T_{wz1})$', '$\sigma(T_{wz2})$', '$\sigma(T_{wz3})$', 'interpreter', 'latex');
 title('Singular Value Plot');
-xlabel('Frequency (rad/s)');
-ylabel('Singular Value (Amplitude)');
+xlabel('Frequency');
+ylabel('Singular Value');
 hold off;
 
 % Compute norms for individual transfer functions
@@ -357,10 +360,9 @@ disp(norm_T_wz_inf);
 %% 3C.1 Exercise 4
 clear io 
 close all
-% Tune magnitude for parameter W_3
-%mag_W_3 = db2mag(8.25);  % at -8.25 dB gamma_1 reaches exactly 1
-mag_W_3 = db2mag(17); 
 
+% Tune magnitude for parameter W_3
+mag_W_3 = db2mag(17);   % at -17.1 dB gamma_2 reaches exactly 1
 W_3 = tf(makeweight(1/A, [freq_W_1, mag_W_3], 1/M));
 
 save('W3.mat', 'W_3')
@@ -373,16 +375,9 @@ P = linearize('Design', io);
 P.InputName = {'w', 'u'};
 P.OutputName = {'z1', 'z2', 'z3', 'v'};
 
-
-
-zpk(G)
 zpk(W_1)
 zpk(W_2)
-
-
-
-
-
+zpk(W_3)
 
 % Design the H-infinity controller using hinfsyn
 [C_e, T_wz, gamma] = hinfsyn(P, nmeas, nctrl, opts);
@@ -390,7 +385,7 @@ zpk(W_2)
 % Compute the closed-loop transfer function with weights
 S_o = 1/(1+G*C_e);
 T_o = 1 - S_o;
-freq_range = {1, 300}; % Frequency range from 1 to 300 rad/s
+freq_range = {0.001, 10000}; % Frequency range from 1 to 300 rad/s
 
 % Plot the singular values of T_wz and its individual components
 figure;
@@ -399,10 +394,10 @@ hold on;
 sigma(T_wz(1,:), freq_range, 'r--');
 sigma(T_wz(2,:), freq_range, 'g--');
 sigma(T_wz(3,:), freq_range, 'b--');
-legend('\sigma(T_{wz})', '\sigma(T_{wz1})', '\sigma(T_{wz2})', '\sigma(T_{wz3})');
+legend('$\sigma(T_{wz})$', '$\sigma(T_{wz1})$', '$\sigma(T_{wz2})$', '$\sigma(T_{wz3})$', 'interpreter', 'latex');
 title('Singular Value Plot');
-xlabel('Frequency (rad/s)');
-ylabel('Singular Value (Amplitude)');
+xlabel('Frequency');
+ylabel('Singular Value');
 hold off;
 
 % Compute norms for individual transfer functions
@@ -435,24 +430,21 @@ zpk(C0_e)
 [z, p, k] = zpkdata(C0_e,'v');
 
 % Extract poles and zeros from the transfer function C0_e
-original_poles = pole(C0_e);
-original_zeros = zero(C0_e);
+poles = pole(C0_e);
+zeros = zero(C0_e);
 
 % Identify poles and zeros to keep
-poles_to_keep = original_poles([false true true true true true true true false]);
-zeros_to_keep = original_zeros([false true true true true true true false]);
+poles_min = poles([false true true true true true true true false]);
+zeros_min = zeros([false true true true true true true false]);
 
-gain_pole = 1/abs(original_poles(1));
-gain_zero = abs(original_zeros(1));
-
-k_new = k * gain_pole * gain_zero;
+k_new = k * abs(zeros(1))/abs(poles(1));
 
 % Create the new transfer function with the kept poles and zeros
-C_e_min = zpk(zeros_to_keep, poles_to_keep, k_new);
+C_e_min = zpk(zeros_min, poles_min, k_new);
 [z, p, k] = zpkdata(C_e_min,'v');
 
-poles_to_keep = original_poles([false true true true true true true false false]);
-C_i_min = zpk(zeros_to_keep, poles_to_keep, k);
+poles_min = poles([false true true true true true true false false]);
+C_i_min = zpk(zeros_min, poles_min, k);
 
 R = reducespec(C_i_min,"balanced");
 figure;
@@ -466,26 +458,57 @@ disp('Reduced Integral Controller C_i_red: ')
 zpk(C_i_red)
 
 figure;
-freq_range = {1, 50000};
+freq_range = {0.01, 100000};
 bode(C0_e, 'r', C_e_min, 'b--', freq_range);
 legend("Original", "Order 7");
 grid on;
 legend('C0_e', 'C_e_min');
-title('Bode Plot of Full and Simplified Controllers');
+title('Bode Plot of the Full and Simplified Controller');
 
 figure;
-range = {1, 1000};
-bode(C_i_min, 'r', C_i_red, 'b--', range);
-legend('C_i_min', 'C_i_red');
-title('Bode Plot of Integral and Reduced Controllers');
+freq_range = {0.01, 100000};
+bode(C_i_min, 'r', C_i_red, 'b--', freq_range);
+grid on;
+legend('C\_i\_min', 'C\_i\_red');
+title('Bode Plot of the Integral and Reduced Controller');
+
+freq_range = logspace(-1, 4, 5000); % Frequency range from 0.1 to 1000 rad/s
+
+% Compute the Bode plots for C_i_min and C_i_red
+[~, phase_C_i_min] = bode(C_i_min, freq_range);
+[~, phase_C_i_red] = bode(C_i_red, freq_range);
+
+% Convert the phase data to a more usable format
+phase_C_i_min = squeeze(phase_C_i_min);
+phase_C_i_red = squeeze(phase_C_i_red);
+
+% Plot the phase responses
+figure;
+semilogx(freq_range, phase_C_i_min, 'g', 'LineWidth', 1.5);
+hold on;
+semilogx(freq_range, phase_C_i_red, 'm--', 'LineWidth', 1.5);
+legend('C\_i\_min', 'C\_i\_red', 'Location', 'Best');
+title('Phase Response of C_i_min and C_i_red');
+xlabel('Frequency (rad/s)');
+ylabel('Phase (deg)');
+grid on;
+
+% Calculate the phase difference between the two controllers
+phase_diff = phase_C_i_red - phase_C_i_min;
+
+% Plot the phase difference
+figure;
+semilogx(freq_range, phase_diff, 'b', 'LineWidth', 1.5);
+title('Phase Difference between C_i_min and C_i_red');
+xlabel('Frequency (rad/s)');
+ylabel('Phase Difference (deg)');
+grid on;
 
 % Plot pole-zero maps
 figure;
-pzmap(C_i_min);
-title('Pole-Zero Map of C_i_min');
-figure;
-pzmap(C_i_red);
-title('Pole-Zero Map of C_i_red');
+pzmap(C_i_min, 'b', C_i_red, 'r' );
+legend('C\_i\_min', 'C\_i\_red');
+title('Pole-Zero Map of C\_i\_min and C\_i\_red');
 
 % Save controllers if needed
 save('C_e_min.mat', 'C_e_min');
@@ -509,8 +532,8 @@ io(3) = linio([model '/Sum3'], 1, 'output'); % Output e1
 io(4) = linio([model '/C_i'], 1, 'output');  % Output u
 io(5) = linio([model '/Demux1'], 1, 'output'); % Output y1
 io(6) = linio([model '/Sum1'], 1, 'output'); % Output e1_d
-io(7) = linio([model '/Sum2'], 1, 'output'); % Output udot_m
-io(8) = linio([model '/Demux'], 2, 'output'); % Output u_p
+io(7) = linio([model '/Sum2'], 1, 'output'); % Output u_p
+io(8) = linio([model '/Demux'], 2, 'output'); % Output udot_m
 
 save('io_ClosedLoop_Test.mat', 'io')
 
@@ -536,7 +559,7 @@ W3_inv = inv(W_3);
 figure;
 
 subplot(2,3,1);
-sigma(W1_inv, 'r', T_r_to_e1, 'b', T_di_to_up, 'g');
+sigma(W1_inv, 'r', T_r_to_e1, 'b', T_di_to_up, 'b');
 title('Singular Values: W1^{-1}, S_o, S_i');
 legend('W1^{-1}', 'S_o', 'S_i');
 
@@ -551,7 +574,7 @@ title('Singular Values: W3^{-1}, T_m');
 legend('W3^{-1}', 'T_m');
 
 subplot(2,3,4);
-sigma(T_di_to_u, 'b', T_r_to_y1, 'g');
+sigma(-T_di_to_u, 'b', T_r_to_y1, 'b');
 title('Singular Values: T_i, T_o');
 legend('T_i', 'T_o');
 
@@ -562,8 +585,8 @@ legend('SoG');
 
 subplot(2,3,6);
 sigma(C_e, 'r', C_e_red, 'b');
-title('Singular Values: Ce, Ce_{red}');
-legend('Ce', 'Ce_{red}');
+title('Singular Values: C\_e, C\_e\_red');
+legend('C\_e', 'C\_e\_red');
 
 
 % Break the loop at the input of the actuator (u_p) and output (y)
@@ -579,11 +602,11 @@ margin(open_loop_tf);
 [Gm, Pm, Wcg, Wcp] = margin(open_loop_tf);
 disp(['Gain Margin (dB): ', num2str(20*log10(Gm))]);
 disp(['Phase Margin (deg): ', num2str(Pm)]);
-disp(['Gain Crossover Frequency (rad/s): ', num2str(Wcg)]);
-disp(['Phase Crossover Frequency (rad/s): ', num2str(Wcp)]);
+disp(['Phase Crossover Frequency (rad/s): ', num2str(Wcg)]);
+disp(['Gain Crossover Frequency (rad/s): ', num2str(Wcp)]);
 
 % Compute delay margin
-DM = Pm / (180/pi) / Wcg;  % Convert PM from degrees to radians
+DM = Pm / (180/pi) / Wcp;  % Convert PM from degrees to radians
 DM_ms = DM * 1000;  % Convert from seconds to milliseconds
 disp(['Delay Margin (ms): ', num2str(DM_ms)]);
 
@@ -619,7 +642,7 @@ Tr_udot_m = T(6,1); % T(6,1)
 SoG = T(3,2);  % T(3,2) = SoG
 
 % Time vector for simulation
-t = linspace(0, 1, 1000);
+t = linspace(0, 1, 10000);
 
 % Step response plots
 figure;
@@ -628,7 +651,7 @@ step(So, t, 'b'); title('Step Response of So');
 legend('So');
 
 subplot(2, 2, 2);
-step(T_o, t, 'b'); hold on; step(T_d, t, 'r'); title('Step Response of To and Td');
+step(T_o, 'b'); hold on; step(T_d, 'r'); title('Step Response of To and Td');
 legend('To', 'Td');
 
 subplot(2, 2, 3);
@@ -650,93 +673,263 @@ info_Tr_udot_m = stepinfo(Tr_udot_m* (180/pi),'SettlingTimeThreshold', 5/100);
 
 % Display the metrics in a table
 metrics_table = table({'So', 'SoG', 'Td', 'To', 'Tr -> \omega_m'}', ...
-    [info_So.RiseTime, info_SoG.RiseTime, info_Td.RiseTime, info_To.RiseTime, info_Tr_udot_m.RiseTime]', ...
+    [info_So.TransientTime, info_SoG.TransientTime, info_Td.TransientTime, info_To.TransientTime, info_Tr_udot_m.TransientTime]', ...
     [info_So.SettlingTime, info_SoG.SettlingTime, info_Td.SettlingTime, info_To.SettlingTime, info_Tr_udot_m.SettlingTime]', ...
     [info_So.Peak, info_SoG.Peak, info_Td.Peak, info_To.Peak, info_Tr_udot_m.Peak]', ...
-    'VariableNames', {'TransferFunction', 'RiseTime', 'SettlingTime', 'Peak'});
+    'VariableNames', {'TransferFunction', 'TransientTime', 'SettlingTime', 'Peak'});
 
 disp(metrics_table);
 
 
+zpk(T_d)
 
+%% Part #3D.1 - Feedback controller design (hinfstruct case)
+clc
+close all
 
-%% Part #3d - Feedback controller design (hinfstruct case)
+s = tf([1,0],1);
+C_e_red_i = tunableTF('C_e_red_s', 2, 2) / s;
 
-% Controller design
-C_E_red = tunableTF('C_e_red', 2, 2) * tf(1, [1 0]);
+options = hinfstructOptions('RandomStart', 25, 'UseParallel', true, 'TolGain', 1e-8);
+[C_e_red_s, gamma_s, info] = hinfstruct(P, C_e_red_i, options);
+C_i_red_s = minreal(tf(C_e_red_s)*s);
 
-opts = hinfstructOptions('RandomStart', 20, 'UseParallel', true, 'TolGain', 1e-5);
-[C_E_red, gamma_red, ~] = hinfstruct(P, C_E_red, opts);
+T_wz_struct = tf(lft(P, C_e_red_s, 1, 1));
 
-C_E_red = tf(C_E_red);
-
-C_I_red = minreal(tf(C_E_red * tf([1 0], 1)));
-
-save('C_I_red.mat', 'C_I_red')
-
-T_wz_new = tf(lft(P, C_E_red, 1, 1));
+T_wz_s_1 = T_wz_struct(1);
+T_wz_s_2 = T_wz_struct(2);
+T_wz_s_3 = T_wz_struct(3);
 
 % Compute norms for individual transfer functions
-gamma_1_new = norm(T_wz_new(1,:), 'inf');
-gamma_2_new = norm(T_wz_new(2,:), 'inf');
-gamma_3_new = norm(T_wz_new(3,:), 'inf');
+gamma_1_struct = norm(T_wz_s_1, 'inf');
+gamma_2_struct = norm(T_wz_s_2, 'inf');
+gamma_3_struct = norm(T_wz_s_3, 'inf');
 
 % Display individual performance levels
-disp('Individual Performance Levels gamma_i:');
-disp(['gamma_1: ', num2str(gamma_1_new)]);
-disp(['gamma_2: ', num2str(gamma_2_new)]);
-disp(['gamma_3: ', num2str(gamma_3_new)]);
+disp('Individual Performance Levels with hinfstruct:');
+disp(['gamma_1: ', num2str(gamma_1_struct)]);
+disp(['gamma_2: ', num2str(gamma_2_struct)]);
+disp(['gamma_3: ', num2str(gamma_3_struct)]);
 
-% Plot the singular values of T_wz and its individual components
+%% Part #3D.1 - Plotting
+
 figure;
 hold on;
 bode(C_i_min, 'b--');
 bode(C_i_red, 'g--');
-bode(C_I_red, 'magenta--')
+bode(C_i_red_s, 'magenta--')
 
-legend('C_i_min (7 states hinfsys)', ...
-       'C_i_red (2 states hinfsys)', ...
-       'C_I_red (2 states hinfstruct))');
+legend('C_{i_{min}}', ...
+       'C_{i_{red}}', ...
+       'C_{i_{red}}^*');
 
-title('C_i stuff');
-xlabel('Frequency (rad/s)');
-ylabel('Gain stuff (Amplitude)');
+title('hinfsys and hinfstruct comparison');
 hold off;
 
-% %% Part #3e - Feedforward controller design
-% F_f  = tf(1, 1); % Unitary gain
-% 
-% % Open the Simulink model
-% load_system('ClosedLoop_Red');
-% 
-% % Specify the input and output points for linearization
-% % io(1) = linio('ClosedLoop_Red/r', 1, 'input');
-% % io(2) = linio('ClosedLoop_Red/y1_out', 1, 'output');
-% 
-% % Linearize the model
-% T_o = linearize('ClosedLoop_Red');   
-% T_o.InputName = {'r'};
-% T_o.OutputName = {'y1'};
-% 
-% % S_o = 1/(1+G_cl_q_sc*C_E_red);
-% % T_o = minreal(1 - S_o);
-% F_f = minreal(T_o * inv(T_d));
-% 
-% 
-% % Extract poles and zeros from the transfer function C0_e
-% original_poles = pole(F_f);
-% original_zeros = zero(F_f);
-% 
-% % Identify poles and zeros to keep based on the thresholds
-% poles_to_keep = original_poles([false false true true true true true false]);
-% zeros_to_keep = original_zeros([false true true true true true]);
-% 
-% % Create the new transfer function with the kept poles and zeros
-% F_f_min = zpk(zeros_to_keep, poles_to_keep, db2mag(12.345));
-% 
-% % Further reduce 
-% R = reducespec(F_f_min,"balanced");
-% F_f_red = getrom(R,Order=2);
+% Plot singular values
+figure;
+hold on;
+sigma(T_wz_s_1);
+sigma(T_wz_s_2);
+sigma(T_wz_s_3);
+legend('T_wz_1', 'T_wz_2', 'T_wz_3');
+title('T_{wz}^* Singular values')
+hold off;
+
+%% Part #3D.2
+close all
+
+C_i = C_i_red_s;
+
+% Load the Simulink model
+model = 'ClosedLoop_Test';
+load_system(model);
+io = load('io_ClosedLoop_Test.mat').io;
+
+% Linearize the model
+T = linearize(model, io);
+
+% Extract required transfer functions
+So_s = T(1,1);   % T(1,1) = S_o
+CeSo_s = T(2,1);    % T(2,1) = CeS_o
+To_s = T(3,1);   % T(3,1) = T_o
+T_m_s = T(4,1); % T(4,1) = T_m
+T_rum_s = T(6,1); % T(6,1)
+T_diu_s = T(2,2);   % T(2,2) = -T_i
+SoG_s = T(3,2);  % T(3,2) = SoG
+T_diup_s = T(5,2);  % T(5,2) = S_i
+
+% Define the weighting filter inverses for comparison
+W1_inv = inv(W_1);
+W2_inv = inv(W_2);
+W3_inv = inv(W_3);
+
+% Plot singular values
+figure;
+
+subplot(2,3,1);
+sigma(W1_inv, 'r', T_r_to_e1, 'b', So_s, 'magenta');
+title('Singular Values: S_o');
+legend('W1^{-1}', 'hinfsys', 'hinfstruct');
+
+subplot(2,3,2);
+sigma(W2_inv, 'r', T_r_to_u, 'b', CeSo_s, 'magenta');
+title('Singular Values: C_eS_o');
+legend('W2^{-1}', 'hinfsys', 'hinfstruct');
+
+subplot(2,3,3);
+sigma(W3_inv, 'r', T_r_to_e1_d, 'b', T_m_s, 'magenta');
+title('Singular Values: T_m');
+legend('W3^{-1}', 'hinfsys', 'hinfstruct')
+
+subplot(2,3,4);
+sigma(T_r_to_y1, 'b', To_s, 'magenta');
+title('Singular Values: T_o');
+legend('hinfsys', 'hinfstruct');
+
+subplot(2,3,5);
+sigma(T_di_to_y1, 'b', SoG_s, 'magenta');
+title('Singular Values: SoG');
+legend('hinfsys', 'hinfstruct')
+
+subplot(2,3,6);
+sigma(C_e, 'r', C_e_min, 'b', C_e_red_s, 'magenta');
+title('Singular Values: Ce, Ce_{red}');
+legend('Ce', 'hinfsys', 'hinfstruct');
+
+% Load the OpenLoop_Test Simulink model
+
+% Linearize the model
+open_loop_tf_str = linearize('OpenLoop_Test', io_open);
+
+% Plot the Bode plot to analyze gain and phase margins
+figure;
+hold on;
+bode(open_loop_tf,'b');
+bode(open_loop_tf_str, 'magenta');
+margin(open_loop_tf)
+margin(open_loop_tf_str);
+title('Bode Plot of the Open Loop Transfer Function');
+legend('hinfsys', 'hinfstruct')
+
+% Compute gain and phase margins
+[Gm_str, Pm_str, Wcg_str, Wcp_str] = margin(open_loop_tf_str);
+disp(['Gain Margin (dB): ', num2str(20*log10(Gm_str))]);
+disp(['Phase Margin (deg): ', num2str(Pm_str)]);
+disp(['Gain Crossover Frequency (rad/s): ', num2str(Wcg_str)]);
+disp(['Phase Crossover Frequency (rad/s): ', num2str(Wcp_str)]);
+
+% Compute delay margin
+DM_str = Pm_str / (180/pi) / Wcg_str;  % Convert PM from degrees to radians
+DM_ms_str = DM_str * 1000;  % Convert from seconds to milliseconds
+disp(['Delay Margin (ms): ', num2str(DM_ms_str)]);
+
+% Load the Simulink model
+model = 'ClosedLoop_Test';
+load_system(model);
+io = load('io_ClosedLoop_Test.mat').io;
+
+% Linearize the model
+T = linearize(model, io);
+% Extract required transfer functions
+So = T(1,1);   % T(1,1) = S_o
+T_o = T(3,1);   % T(3,1) = T_o
+Tr_udot_m = T(6,1); % T(6,1)
+SoG = T(3,2);  % T(3,2) = SoG
+
+% Step response plots
+figure;
+subplot(2, 2, 1);
+step(So, t, 'b'); title('Step Response of So');
+legend('So');
+
+subplot(2, 2, 2);
+step(T_o, t, 'b'); hold on; step(T_d, t, 'r'); title('Step Response of To and Td');
+legend('To', 'Td');
+
+subplot(2, 2, 3);
+step(SoG, t, 'b'); title('Step Response of SoG');
+legend('SoG');
+
+subplot(2, 2, 4);
+step(Tr_udot_m * (180/pi), t, 'b'); title('Step Response of Tr -> \omega_m');
+legend('Tr -> \omega_m');
+ylabel('Degrees/Second');
+hold off;
+% Step response plots
+figure;
+subplot(2, 2, 1);
+step(So, T(1,1), 'b'); title('Step Response of So');
+legend('So');
+
+subplot(2, 2, 2);
+step(T_o, T(3,1), 'b'); hold on; step(T_d, t, 'r'); title('Step Response of To and Td');
+legend('To', 'Td');
+
+subplot(2, 2, 3);
+step(SoG, T(3,2), 'b'); title('Step Response of SoG');
+legend('SoG');
+
+subplot(2, 2, 4);
+step(Tr_udot_m, T(6,1) * (180/pi), 'b'); title('Step Response of Tr -> \omega_m');
+legend('Tr -> \omega_m');
+ylabel('Degrees/Second');
+
+%% Part #3e - Feedforward controller design
+
+F_f_init = T_d * inv(To_s);
+[orig_zeros,orig_poles,orig_gain] = zpkdata(F_f_init,'v');
+
+% Identify poles and zeros to keep
+mod_zeros = orig_zeros(abs(orig_zeros) < 100 & real(orig_zeros) < 0);
+mod_poles = orig_poles(real(orig_poles) < 0);
+
+% Create the new transfer function with the kept poles and zeros
+F_f_lf = minreal(zpk(mod_zeros, mod_poles, 1));
+F_f_lf = F_f_lf / dcgain(F_f_lf);
+
+% Further reduce 
+R = reducespec(F_f_lf,"balanced");
+F_f = getrom(R,Order=3);
+
+figure;
+hold on;
+bode(F_f);
+bode(F_f_lf);
+bode(F_f_init);
+legend('Reduced', 'Low Frequency', 'Initial');
+
+% Load the Simulink model
+model = 'ClosedLoop_Test';
+load_system(model);
+io = load('io_ClosedLoop_Test.mat').io;
+
+% Linearize the model
+T = linearize(model, io);
+T_m_ff = T(4,1);
+T_o_ff = T(3,1);
+T_rum_ff = T(6,1);
+
+figure;
+subplot(2, 2, 1);
+sigma(W3_inv, 'r', T_r_to_e1_d, 'b', T_m_s, 'magenta', T_m_ff, 'g');
+title('Singular Values: T_m');
+legend('W3^{-1}', 'hinfsys', 'hinfstruct', 'feedforward');
+
+subplot(2, 2, 2);
+sigma(C_i_red, 'r', C_i_red_s, 'b', F_f, 'magenta');
+title('Singular Values: T_o');
+legend('hinfsys', 'hinfstruct', 'feedforward');
+
+subplot(2, 2, 3);
+step(T_d, 'r', T_r_to_y1, 'b', To_s, 'magenta', T_o_ff, 'g');
+title('Step Responses: T_o');
+legend('Reference', 'hinfsys', 'hinfstruct', 'feedforward');
+
+subplot(2, 2, 4);
+step(T_r_to_udot_m*(180/pi), 'b', T_rum*(180/pi), 'magenta', T_rum_ff*(180/pi), 'g');
+title('Step Responses: T_{r_{\dot{u}_m}}');
+legend('hinfsys', 'hinfstruct', 'feedforward');
 
 %% Cell Part %4
 clear
